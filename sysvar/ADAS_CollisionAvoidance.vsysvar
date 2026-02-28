@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<systemvariables version="4">
+  <namespace name="" comment="">
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Sim  —  시뮬레이션 입력 (패널 → CAPL)
+         ═══════════════════════════════════════════════════════════════ -->
+    <namespace name="Sim" comment="Simulation input variables (Panel to CAPL)">
+
+      <namespace name="Driver" comment="Driver input simulation (SimulatorNode reads)">
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="Nm" name="SteeringTorque" comment="운전자 조향 토크. abs>=3Nm 시 Override 자동 ON" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="0.0" minValue="-100.0" maxValue="100.0" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="%" name="BrakePressure" comment="브레이크 페달 압력. >10% 시 Override 자동 ON" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="100" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="%" name="AccelPedal" comment="가속 페달 개도율" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="100" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Override" comment="0=Override 없음, 1=운전자 Override 활성. 0 설정 시 SteeringTorque/BrakePressure 동시 초기화" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+      </namespace>
+
+      <namespace name="Radar" comment="Radar sensor simulation input (SensorECU_Radar reads/writes)">
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="m" name="Distance" comment="레이더 감지 거리. 정상 상태에서 자동 감소 후 역방향 업데이트" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="120.0" minValue="0.0" maxValue="250.0" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="km/h" name="RelativeSpeed" comment="접근 속도 (음수=접근, 양수=이격)" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="-30.0" minValue="-200.0" maxValue="200.0" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Status" comment="0=OK, 1=Degraded, 2=Fault" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="2" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="ObjectType" comment="0=없음, 1=차량, 2=보행자, 3=미상" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="1" minValue="0" maxValue="3" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="FaultInject" comment="1=Status를 즉시 Fault(2)로 강제 변경, 0 복귀 시 OK(0) 복원" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+      </namespace>
+
+      <namespace name="Camera" comment="Camera sensor simulation input (SensorECU_Camera reads)">
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="m" name="Distance" comment="카메라 감지 거리" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="115.0" minValue="0.0" maxValue="250.0" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="ObjectDetected" comment="0=객체 없음, 1=객체 감지" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="1" minValue="0" maxValue="1" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="LeftLaneAvail" comment="0=좌측 차로 변경 불가, 1=가능" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="1" minValue="0" maxValue="1" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="RightLaneAvail" comment="0=우측 차로 변경 불가, 1=가능" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="m" name="LaneWidth" comment="감지된 차로 폭" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="3.5" minValue="0.0" maxValue="6.0" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Status" comment="0=OK, 1=Degraded, 2=Fault" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="2" />
+      </namespace>
+
+      <namespace name="Vehicle" comment="Vehicle state simulation input (ChassisECU reads/writes)">
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="km/h" name="Speed" comment="차량 속도. 0=ChassisECU 동역학 계산 모드, >0=패널 직접 입력 모드. 동역학 모드에서 역방향 업데이트" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="80.0" minValue="0.0" maxValue="250.0" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Gear" comment="0=P, 1=R, 2=N, 3=D" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="3" minValue="0" maxValue="3" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="IGN" comment="0=시동 OFF (Speed도 0으로 리셋), 1=시동 ON" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="1" minValue="0" maxValue="1" />
+      </namespace>
+
+      <namespace name="FaultInject" comment="Communication fault injection - Drop and Delay (SensorECU_Radar/Camera reads)">
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="RadarDropEnable" comment="1=레이더 메시지 랜덤 Drop 활성화" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="%" name="RadarDropRate" comment="레이더 Drop 확률. random(100) &lt; Rate 이면 해당 주기 Skip" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="100" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="ms" name="RadarDelayMs" comment="레이더 송신 지연. tmr_RadarDelay 타이머로 구현" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="500" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="CameraDropEnable" comment="1=카메라 메시지 랜덤 Drop 활성화" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="%" name="CameraDropRate" comment="카메라 Drop 확률 (%)" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="100" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="ms" name="CameraDelayMs" comment="카메라 송신 지연 (ms)" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="500" />
+      </namespace>
+
+    </namespace>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Status  —  ECU 상태 출력 (CAPL → 패널, READ ONLY)
+         ═══════════════════════════════════════════════════════════════ -->
+    <namespace name="Status" comment="ECU status output (CAPL to Panel, READ ONLY)">
+
+      <namespace name="ADAS" comment="ADAS ECU status - updated by ADAS_ECU and SimulatorNode">
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="SystemState" comment="[READ ONLY] 0=Standby, 1=Armed, 2=Risk, 3=Evasive, 4=FailSafe" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="4" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="s" name="TTC" comment="[READ ONLY] Time-To-Collision (초). 99.9=위험 없음" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="99.9" minValue="0.0" maxValue="99.9" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="CollisionRisk" comment="[READ ONLY] 0=없음, 1=경고(TTC&lt;=2.5s), 2=위험(TTC&lt;=1.5s)" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="2" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="EvasionDir" comment="[READ ONLY] 0=없음, 1=좌측 회피, 2=우측 회피" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="2" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="SensorFusionValid" comment="[READ ONLY] 0=퓨전 무효(Disagreement 또는 양쪽 Fault), 1=유효" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="1" minValue="0" maxValue="1" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="FailSafeCode" comment="[READ ONLY] 0=정상, 1=SensorDegraded, 2=SensorFault, 3=CommTimeout, 4=CompositeFault" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="4" />
+      </namespace>
+
+      <namespace name="EPS" comment="EPS ECU status - updated by EPS_ECU">
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Ready" comment="[READ ONLY] EPS 준비 상태. Fault 발생 시 0으로 자동 변경" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="deg" name="ActualAngle" comment="[READ ONLY] 실제 조향각. 50ms마다 0.5deg씩 목표각 추종" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="0.0" minValue="-30.0" maxValue="30.0" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Fault" comment="[READ ONLY] EPS 고장 플래그. 조향각 +-30deg 초과 시 자동 1" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+      </namespace>
+
+      <namespace name="ESC" comment="ESC ECU status - updated by ESC_ECU">
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Active" comment="[READ ONLY] ESC/AEB 개입 활성 여부" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Intervention" comment="[READ ONLY] 0=없음, 1=Light, 2=Medium, 3=Full" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="3" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="km/h" name="WheelSpeedFL" comment="[READ ONLY] 전좌 휠속도 (VehicleSpeed * 0.99)" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="0.0" minValue="0.0" maxValue="250.0" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="km/h" name="WheelSpeedFR" comment="[READ ONLY] 전우 휠속도 (VehicleSpeed * 1.01)" bitcount="64" isSigned="true" encoding="65001" type="float" startValue="0.0" minValue="0.0" maxValue="250.0" />
+      </namespace>
+
+      <namespace name="HMI" comment="HMI warning status - updated by ADAS_ECU and SimulatorNode">
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="FCW_Warning" comment="[READ ONLY] 전방 충돌 경고 활성. Risk 상태 진입 시 업데이트" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="AEB_Warning" comment="[READ ONLY] AEB 작동 경고" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="FailSafe_Warning" comment="[READ ONLY] FailSafe 상태 진입 경고" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="Override_Warning" comment="[READ ONLY] 운전자 Override 감지 경고" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="WarningLevel" comment="[READ ONLY] 0=없음, 1=낮음, 2=보통, 3=높음 (FailSafe 시 항상 3)" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="3" />
+      </namespace>
+
+    </namespace>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         Ctrl  —  ECU 제어 (패널 → CAPL, 양방향)
+         ═══════════════════════════════════════════════════════════════ -->
+    <namespace name="Ctrl" comment="ECU control input (Panel to CAPL, bidirectional)">
+
+      <namespace name="EPS" comment="EPS fault injection - bidirectional with EPS_ECU">
+        <variable anlyzLocal="2" readOnly="false" valueSequence="false" unit="" name="FaultInject" comment="양방향: 패널 버튼=1 시 EPS_ECU Ready=0, Fault=1 강제 주입. 조향각 +-30deg 초과 시 EPS_ECU가 자동으로 1 set" bitcount="32" isSigned="false" encoding="65001" type="int" startValue="0" minValue="0" maxValue="1" />
+      </namespace>
+
+    </namespace>
+
+  </namespace>
+</systemvariables>

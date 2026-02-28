@@ -1,0 +1,168 @@
+/*@!Encoding:65001*/
+/*============================================================
+  File    : SensorECU_Radar.can
+  Node    : SensorECU_Radar
+  Project : ADAS_CollisionAvoidance
+
+  Panel 연동 sysvar (입력):
+    Sim::Radar::Distance         [0.0 ~ 250.0 m]
+    Sim::Radar::RelativeSpeed    [-200.0 ~ 200.0 km/h]
+    Sim::Radar::Status           [0=OK / 1=Degraded / 2=Fault]
+    Sim::Radar::ObjectType       [0~3]
+    Sim::Radar::FaultInject      [0 / 1]
+    Sim::FaultInject::RadarDropEnable / RadarDropRate / RadarDelayMs
+============================================================*/
+
+variables
+{
+  message RadarSensorData  msg_Radar;
+  msTimer tmr_Radar;
+  msTimer tmr_RadarDelay;  // 지연 송신용
+  float  gDistance        = 120.0;
+  float  gRelSpeed        = -30.0;
+  byte   gStatus          = 0;
+  byte   gObjectType      = 1;
+  int    gFaultInject     = 0;
+  byte   gAliveCounter    = 0;
+
+  // Fault injection 파라미터
+  int    gDropEnable      = 0;
+  int    gDropRate        = 0;   // 0~100 %
+  int    gDelayMs         = 0;
+}
+
+on start
+{
+  // sysvar 초기값 로드
+  gDistance    = (float)@sysvar::Sim::Radar::Distance;
+  gRelSpeed    = (float)@sysvar::Sim::Radar::RelativeSpeed;
+  gStatus      = (byte)@sysvar::Sim::Radar::Status;
+  gObjectType  = (byte)@sysvar::Sim::Radar::ObjectType;
+  gFaultInject = @sysvar::Sim::Radar::FaultInject;
+  gDropEnable  = @sysvar::Sim::FaultInject::RadarDropEnable;
+  gDropRate    = @sysvar::Sim::FaultInject::RadarDropRate;
+  gDelayMs     = @sysvar::Sim::FaultInject::RadarDelayMs;
+
+  setTimer(tmr_Radar, 20);
+  write("[SensorECU_Radar] Started. sysvar linked.");
+}
+
+/*----------------------------------------------------------
+  sysvar 핸들러
+----------------------------------------------------------*/
+on sysvar Sim::Radar::Distance
+{
+  gDistance = (float)@sysvar::Sim::Radar::Distance;
+}
+
+on sysvar Sim::Radar::RelativeSpeed
+{
+  gRelSpeed = (float)@sysvar::Sim::Radar::RelativeSpeed;
+}
+
+on sysvar Sim::Radar::Status
+{
+  char sStatusStr[16];
+  gStatus = (byte)@sysvar::Sim::Radar::Status;
+  if      (gStatus == 0) snprintf(sStatusStr, elcount(sStatusStr), "OK");
+  else if (gStatus == 1) snprintf(sStatusStr, elcount(sStatusStr), "Degraded");
+  else                   snprintf(sStatusStr, elcount(sStatusStr), "Fault");
+  write("[SensorECU_Radar] Status -> %d (%s)", gStatus, sStatusStr);
+}
+
+on sysvar Sim::Radar::ObjectType
+{
+  gObjectType = (byte)@sysvar::Sim::Radar::ObjectType;
+}
+
+on sysvar Sim::Radar::FaultInject
+{
+  gFaultInject = @sysvar::Sim::Radar::FaultInject;
+  if (gFaultInject) {
+    gStatus = 2;
+    @sysvar::Sim::Radar::Status = 2;
+    write("[SensorECU_Radar] FaultInject ON -> Status=Fault");
+  } else {
+    gStatus = 0;
+    @sysvar::Sim::Radar::Status = 0;
+    write("[SensorECU_Radar] FaultInject OFF -> Status=OK");
+  }
+}
+
+on sysvar Sim::FaultInject::RadarDropEnable
+{
+  gDropEnable = @sysvar::Sim::FaultInject::RadarDropEnable;
+  write("[SensorECU_Radar] Drop=%d Rate=%d%%", gDropEnable, gDropRate);
+}
+
+on sysvar Sim::FaultInject::RadarDropRate
+{
+  gDropRate = @sysvar::Sim::FaultInject::RadarDropRate;
+}
+
+on sysvar Sim::FaultInject::RadarDelayMs
+{
+  gDelayMs = @sysvar::Sim::FaultInject::RadarDelayMs;
+  write("[SensorECU_Radar] DelayMs=%d", gDelayMs);
+}
+
+/*----------------------------------------------------------
+  20ms 주기 TX (Drop / Delay 적용)
+----------------------------------------------------------*/
+on timer tmr_Radar
+{
+  gAliveCounter = (gAliveCounter + 1) & 0x0F;
+
+  // 접근 시뮬레이션 (정상 상태에서만)
+  if (gStatus == 0 && !gFaultInject) {
+    if (gDistance > 10.0)
+      gDistance += (gRelSpeed * 0.020);
+    else
+      gDistance = 10.0;
+    // sysvar 역방향 업데이트 (패널 표시)
+    @sysvar::Sim::Radar::Distance = gDistance;
+  }
+
+  // Drop 처리
+  if (gDropEnable && gDropRate > 0) {
+    int rnd;
+    rnd = random(100);
+    if (rnd < gDropRate) {
+      setTimer(tmr_Radar, 20);
+      return; // 이번 사이클 송신 Skip
+    }
+  }
+
+  // Delay 처리
+  if (gDelayMs > 0) {
+    packRadarMsg();
+    setTimer(tmr_RadarDelay, gDelayMs);
+  } else {
+    packRadarMsg();
+    output(msg_Radar);
+  }
+
+  setTimer(tmr_Radar, 20);
+}
+
+on timer tmr_RadarDelay
+{
+  output(msg_Radar); // 지연 후 송신
+}
+
+void packRadarMsg()
+{
+  msg_Radar.Radar_Distance      = (word)(gDistance / 0.1);
+  msg_Radar.Radar_RelativeSpeed = (int)(gRelSpeed / 0.1);
+  msg_Radar.Radar_Status        = gStatus;
+  msg_Radar.Radar_ObjectType    = gObjectType;
+  msg_Radar.Radar_AliveCounter  = gAliveCounter;
+  msg_Radar.Radar_CRC           = calcCRC_Radar();
+}
+
+on stopMeasurement { write("[SensorECU_Radar] Stopped."); }
+
+byte calcCRC_Radar()
+{
+  byte c=0; int i; for(i=0;i<7;i++) c^=msg_Radar.byte(i); return c;
+}

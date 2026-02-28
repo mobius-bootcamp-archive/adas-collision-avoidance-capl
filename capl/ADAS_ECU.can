@@ -1,0 +1,448 @@
+/*@!Encoding:65001*/
+/*============================================================
+  File    : ADAS_ECU.can
+  Node    : ADAS_ECU
+  Project : ADAS_CollisionAvoidance
+
+  sysvar 출력 (패널 표시):
+    Status::ADAS::SystemState / TTC / CollisionRisk
+    Status::ADAS::EvasionDir / SensorFusionValid / FailSafeCode
+    Status::HMI::FCW_Warning / AEB_Warning / FailSafe_Warning / WarningLevel
+
+  sysvar 입력 없음 (모든 입력은 CAN 메시지로 수신)
+  * 상태 표시 sysvar는 SimulatorNode와 중복 업데이트 방지를 위해
+     ADAS_ECU가 직접 write하지 않고 SimulatorNode의 on message에서 처리.
+     * 아래 Status sysvar는 ADAS_ECU에서 함께 업데이트합니다.
+============================================================*/
+
+includes {}
+
+variables
+{
+  // ---- State Machine ----
+  int    gSystemState     = 0;   // 0=Standby,1=Armed,2=Risk,3=Evasive,4=FailSafe
+  int    gPrevState       = -1;
+
+  // ---- Sensor Data ----
+  float  gRadarDist       = 250.0;
+  float  gRadarRelSpd     = 0.0;
+  float  gCamDist         = 250.0;
+  float  gFusedDist       = 250.0;
+  int    gRadarStatus     = 0;
+  int    gCamStatus       = 0;
+  int    gRadarObjectType = 0;
+  int    gSensorValid     = 1;
+  int    gSensorDisagree  = 0;
+
+  // ---- TTC / Risk ----
+  float  gTTC             = 99.9;
+  int    gCollisionRisk   = 0;
+  const float TTC_WARN    = 2.5;
+  const float TTC_CRIT    = 1.5;
+  const float TTC_EVASIVE = 0.8;
+
+  // ---- Vehicle ----
+  float  gVehSpeed        = 0.0;
+  int    gVehGear         = 0;
+  int    gIGN             = 0;
+
+  // ---- Driver ----
+  float  gSteerTorque     = 0.0;
+  int    gBrakePressure   = 0;
+  int    gOverride        = 0;
+
+  // ---- Lane ----
+  int    gLeftLane        = 0;
+  int    gRightLane       = 0;
+
+  // ---- EPS / ESC ----
+  int    gEPS_Ready       = 0;
+  int    gEPS_Fault       = 0;
+  int    gESC_Ready       = 0;
+
+  // ---- Evasion ----
+  int    gEvasionDir      = 0;
+  int    gEvasionAllowed  = 0;
+  int    gSteerIntensity  = 0;
+
+  // ---- AEB ----
+  int    gAEB_Active      = 0;
+  int    gAEB_Level       = 0;
+  float  gTargetDecel     = 0.0;
+
+  // ---- Fault ----
+  int    gFailSafeCode    = 0;
+  int    gDTC_Present     = 0;
+  word   gDTC_Code        = 0;
+  int    gRadarTimeout    = 0;
+  int    gCamTimeout      = 0;
+
+  // ---- Alive counters ----
+  byte   gSteerAlive      = 0;
+  byte   gBrakeAlive      = 0;
+  byte   gStatusAlive     = 0;
+  byte   gDiagAlive       = 0;
+
+  // ---- Timers ----
+  msTimer tmr_Steering;
+  msTimer tmr_Brake;
+  msTimer tmr_Status;
+  msTimer tmr_RadarWD;
+  msTimer tmr_CameraWD;
+  msTimer tmr_VehicleWD;
+  const int WD_MS = 200;
+
+  // ---- TX Messages ----
+  message ADAS_SteeringCommand  msg_Steer;
+  message ADAS_BrakeCommand     msg_Brake;
+  message ADAS_SystemStatus     msg_Status;
+  message ADAS_DiagnosticStatus msg_Diag;
+  message HMI_Warning           msg_HMI;
+}
+
+on start
+{
+  gSystemState = 0;
+  setTimer(tmr_Steering, 20);
+  setTimer(tmr_Brake,    20);
+  setTimer(tmr_Status,   100);
+  setTimer(tmr_RadarWD,  WD_MS);
+  setTimer(tmr_CameraWD, WD_MS);
+  setTimer(tmr_VehicleWD,WD_MS);
+
+  // sysvar 초기화
+  @sysvar::Status::ADAS::SystemState    = 0;
+  @sysvar::Status::ADAS::TTC            = 99.9;
+  @sysvar::Status::ADAS::CollisionRisk  = 0;
+  @sysvar::Status::ADAS::FailSafeCode   = 0;
+  @sysvar::Status::ADAS::SensorFusionValid = 1;
+
+  write("[ADAS_ECU] Initialized. State=Standby");
+}
+
+/*============================================================
+  RX HANDLERS
+============================================================*/
+on message RadarSensorData
+{
+  cancelTimer(tmr_RadarWD);
+  setTimer(tmr_RadarWD, WD_MS);
+  gRadarTimeout   = 0;
+  gRadarDist      = this.Radar_Distance      * 0.1;
+  gRadarRelSpd    = this.Radar_RelativeSpeed * 0.1;
+  gRadarStatus    = this.Radar_Status;
+  gRadarObjectType= this.Radar_ObjectType;
+  runFusion(); runAssessment(); runFSM();
+}
+
+on message CameraSensorData
+{
+  cancelTimer(tmr_CameraWD);
+  setTimer(tmr_CameraWD, WD_MS);
+  gCamTimeout  = 0;
+  gCamDist     = this.Camera_Distance * 0.1;
+  gCamStatus   = this.Camera_Status;
+  gLeftLane    = this.Camera_LeftLaneAvailable;
+  gRightLane   = this.Camera_RightLaneAvailable;
+  runFusion(); runAssessment(); runFSM();
+}
+
+on message VehicleStatus
+{
+  cancelTimer(tmr_VehicleWD);
+  setTimer(tmr_VehicleWD, WD_MS);
+  gVehSpeed = this.Vehicle_Speed * 0.1;
+  gVehGear  = this.Vehicle_Gear;
+  gIGN      = this.IGN_Status;
+  runFSM();
+}
+
+on message DriverInput
+{
+  gSteerTorque  = this.Driver_SteeringTorque * 0.1;
+  gBrakePressure= this.Driver_BrakePressure;
+  gOverride     = this.Driver_Override;
+  if (gOverride && gSystemState == 3) {
+    write("[ADAS_ECU] Driver OVERRIDE -> Standby");
+    changeState(0);
+  }
+}
+
+on message EPS_Status
+{
+  gEPS_Ready = this.EPS_Ready;
+  gEPS_Fault = this.EPS_Fault;
+  if (gEPS_Fault && gSystemState == 3) {
+    write("[ADAS_ECU] EPS Fault during Evasive -> FailSafe");
+    enterFailSafe(2);
+  }
+}
+
+on message ESC_Status
+{
+  gESC_Ready = this.ESC_Ready;
+}
+
+/*============================================================
+  WATCHDOGS
+============================================================*/
+on timer tmr_RadarWD  { gRadarTimeout=1; write("[ADAS_ECU] RADAR TIMEOUT");  checkFaults(); }
+on timer tmr_CameraWD { gCamTimeout=1;   write("[ADAS_ECU] CAMERA TIMEOUT"); checkFaults(); }
+on timer tmr_VehicleWD{ write("[ADAS_ECU] VEHICLE TIMEOUT"); checkFaults(); }
+
+/*============================================================
+  SENSOR FUSION
+============================================================*/
+void runFusion()
+{
+  if (gRadarStatus <= 1 && gCamStatus <= 1) {
+    if (abs(gRadarDist - gCamDist) > 20.0) {
+      if (!gSensorDisagree) {
+        gSensorDisagree = 1; gSensorValid = 0;
+        write("[ADAS_ECU] Sensor DISAGREEMENT: Radar=%.1fm Cam=%.1fm", gRadarDist, gCamDist);
+      }
+    } else { gSensorDisagree = 0; gSensorValid = 1; }
+  }
+
+  if      (gRadarStatus==0 && gCamStatus==0) gFusedDist = gRadarDist*0.6 + gCamDist*0.4;
+  else if (gRadarStatus==0)                  gFusedDist = gRadarDist;
+  else if (gCamStatus==0)                    gFusedDist = gCamDist;
+  else { gFusedDist = 250.0; gSensorValid = 0; }
+
+  @sysvar::Status::ADAS::SensorFusionValid = gSensorValid;
+}
+
+/*============================================================
+  TTC / RISK
+============================================================*/
+void runAssessment()
+{
+  float vRel_ms;
+  vRel_ms = gRadarRelSpd / 3.6;
+  gTTC = (vRel_ms < -0.1) ? (gFusedDist / (-vRel_ms)) : 99.9;
+  if (gTTC > 99.9) gTTC = 99.9;
+
+  if      (!gSensorValid)       gCollisionRisk = 0;
+  else if (gTTC <= TTC_CRIT)    gCollisionRisk = 2;
+  else if (gTTC <= TTC_WARN)    gCollisionRisk = 1;
+  else                          gCollisionRisk = 0;
+
+  @sysvar::Status::ADAS::TTC           = gTTC;
+  @sysvar::Status::ADAS::CollisionRisk = gCollisionRisk;
+}
+
+/*============================================================
+  STATE MACHINE
+============================================================*/
+void runFSM()
+{
+  checkFaults();
+  if (gSystemState == 4) return;
+
+  switch(gSystemState) {
+    case 0: // Standby
+      if (gIGN==1 && gVehGear==3 && gVehSpeed>0.5) changeState(1);
+      break;
+    case 1: // Armed
+      if (!gIGN || gVehGear!=3)               { changeState(0); break; }
+      if (gCollisionRisk>=1 && gSensorValid)   changeState(2);
+      break;
+    case 2: // Risk
+      if (gCollisionRisk==0)                   { changeState(1); break; }
+      if (gTTC<=TTC_EVASIVE && gSensorValid) {
+        decideEvasion();
+        if (gEvasionAllowed) changeState(3);
+        else                 activateAEB(3);
+      }
+      sendFCWWarning();
+      break;
+    case 3: // Evasive
+      if (gTTC>TTC_WARN || gFusedDist>50.0 || gOverride) {
+        write("[ADAS_ECU] Evasion end. TTC=%.2f Dist=%.1f Override=%d",
+              gTTC, gFusedDist, gOverride);
+        gAEB_Active=0; gAEB_Level=0; gTargetDecel=0.0; gEvasionDir=0;
+        changeState(1);
+      }
+      break;
+    case 4: // FailSafe
+      if (gRadarStatus==0 && gCamStatus==0 &&
+          !gRadarTimeout && !gCamTimeout && !gSensorDisagree) {
+        write("[ADAS_ECU] FailSafe recovered -> Standby");
+        gFailSafeCode=0; gDTC_Present=0;
+        @sysvar::Status::ADAS::FailSafeCode=0;
+        changeState(0);
+      }
+      break;
+  }
+}
+
+void checkFaults()
+{
+  int sf;
+  int cf;
+  sf = (gRadarStatus==2 || gCamStatus==2 || !gSensorValid) ? 1 : 0;
+  cf = (gRadarTimeout || gCamTimeout) ? 1 : 0;
+  if      (sf && cf)            enterFailSafe(4);
+  else if (sf && gRadarStatus==2) enterFailSafe(2);
+  else if (sf)                  enterFailSafe(1);
+  else if (cf)                  enterFailSafe(3);
+}
+
+void enterFailSafe(int code)
+{
+  char sFailStr[24];
+  if (gSystemState==4) return;
+  gFailSafeCode=code; gDTC_Present=1; gDTC_Code=0xA000+code;
+  gAEB_Active=1; gAEB_Level=2; gTargetDecel=3.0;
+
+  @sysvar::Status::ADAS::FailSafeCode = code;
+  if      (code==1) snprintf(sFailStr, elcount(sFailStr), "SensorDegraded");
+  else if (code==2) snprintf(sFailStr, elcount(sFailStr), "SensorFault");
+  else if (code==3) snprintf(sFailStr, elcount(sFailStr), "CommTimeout");
+  else              snprintf(sFailStr, elcount(sFailStr), "CompositeFault");
+  write("[ADAS_ECU] *** FAILSAFE *** Code=%d (%s)", code, sFailStr);
+  changeState(4);
+  sendDiag();
+  sendFailSafeWarn();
+}
+
+void decideEvasion()
+{
+  gEvasionAllowed=0; gEvasionDir=0;
+  if (!gSensorValid)                        { write("[ADAS_ECU] No evasion: invalid sensor"); return; }
+  if (!gLeftLane && !gRightLane)            { write("[ADAS_ECU] No evasion: no lane");        return; }
+  if (gVehSpeed<5.0 || gVehSpeed>180.0)    { write("[ADAS_ECU] No evasion: speed OOB");       return; }
+  if (gOverride)                            { write("[ADAS_ECU] No evasion: override");        return; }
+  if (!gEPS_Ready || gEPS_Fault)            { write("[ADAS_ECU] No evasion: EPS not ready");   return; }
+
+  gEvasionAllowed = 1;
+  gEvasionDir     = gLeftLane ? 1 : 2;
+  gSteerIntensity = (gTTC<0.5)?3:(gTTC<1.0)?2:1;
+
+  if (gTTC < 0.8) {
+    gAEB_Active  = 1;
+    gAEB_Level   = gSteerIntensity;
+    gTargetDecel = (gSteerIntensity==3)?8.0:(gSteerIntensity==2)?5.0:3.0;
+  }
+  @sysvar::Status::ADAS::EvasionDir = gEvasionDir;
+  write("[ADAS_ECU] Evasion: Dir=%d Intensity=%d TTC=%.2f", gEvasionDir, gSteerIntensity, gTTC);
+}
+
+void activateAEB(int lvl)
+{
+  gAEB_Active=1; gAEB_Level=lvl;
+  gTargetDecel=(lvl==3)?9.0:(lvl==2)?5.0:2.0;
+  write("[ADAS_ECU] AEB Level=%d Decel=%.1f", lvl, gTargetDecel);
+}
+
+void changeState(int ns)
+{
+  if (gSystemState==ns) return;
+  write("[ADAS_ECU] State %d -> %d  TTC=%.2f Spd=%.1f",
+        gSystemState, ns, gTTC, gVehSpeed);
+  gPrevState   = gSystemState;
+  gSystemState = ns;
+  @sysvar::Status::ADAS::SystemState = ns;
+}
+
+/*============================================================
+  TX TIMERS
+============================================================*/
+on timer tmr_Steering
+{
+  float angle;
+  int dir; int act; int torq;
+  gSteerAlive = (gSteerAlive+1) & 0x0F;
+  angle = 0.0; dir=0; act=0; torq=0;
+  if (gSystemState==3 && gEvasionAllowed) {
+    dir=gEvasionDir; act=1; torq=gSteerIntensity*33;
+    angle=(gEvasionDir==1?-1.0:1.0)*gSteerIntensity*1.5;
+  }
+  msg_Steer.Target_SteeringAngle  = (int)(angle/0.01);
+  msg_Steer.Steering_Direction    = dir;
+  msg_Steer.Steering_Torque       = torq;
+  msg_Steer.Steering_Active       = act;
+  msg_Steer.Steering_AliveCounter = gSteerAlive;
+  msg_Steer.Steering_CRC          = calcCRC_S();
+  output(msg_Steer);
+  setTimer(tmr_Steering, 20);
+}
+
+on timer tmr_Brake
+{
+  gBrakeAlive = (gBrakeAlive+1) & 0x0F;
+  msg_Brake.Target_Deceleration = (word)(gTargetDecel/0.01);
+  msg_Brake.AEB_Active          = gAEB_Active;
+  msg_Brake.AEB_Level           = gAEB_Level;
+  msg_Brake.Brake_AliveCounter  = gBrakeAlive;
+  msg_Brake.Brake_CRC           = calcCRC_B();
+  output(msg_Brake);
+  setTimer(tmr_Brake, 20);
+}
+
+on timer tmr_Status
+{
+  word ttcRaw;
+  ttcRaw = (gTTC>10.0)?1000:(word)(gTTC/0.01);
+  gStatusAlive = (gStatusAlive+1) & 0x0F;
+  msg_Status.System_State        = gSystemState;
+  msg_Status.TTC_Value           = ttcRaw;
+  msg_Status.CollisionRisk       = gCollisionRisk;
+  msg_Status.SensorFusion_Valid  = gSensorValid;
+  msg_Status.Evasion_Direction   = gEvasionDir;
+  msg_Status.Status_AliveCounter = gStatusAlive;
+  msg_Status.Status_CRC          = calcCRC_St();
+  output(msg_Status);
+  setTimer(tmr_Status, 100);
+}
+
+/*============================================================
+  EVENT TX
+============================================================*/
+void sendDiag()
+{
+  gDiagAlive=(gDiagAlive+1)&0x0F;
+  msg_Diag.FailSafe_Code       = gFailSafeCode;
+  msg_Diag.DTC_Present         = gDTC_Present;
+  msg_Diag.DTC_Code            = gDTC_Code;
+  msg_Diag.Radar_Timeout       = gRadarTimeout;
+  msg_Diag.Camera_Timeout      = gCamTimeout;
+  msg_Diag.Sensor_Disagreement = gSensorDisagree;
+  msg_Diag.Diag_AliveCounter   = gDiagAlive;
+  msg_Diag.Diag_CRC            = calcCRC_D();
+  output(msg_Diag);
+}
+
+void sendFCWWarning()
+{
+  msg_HMI.FCW_Warning      = 1;
+  msg_HMI.AEB_Warning      = gAEB_Active;
+  msg_HMI.FailSafe_Warning = 0;
+  msg_HMI.Override_Warning = 0;
+  msg_HMI.Warning_Level    = gCollisionRisk;
+  msg_HMI.HMI_AliveCounter = (msg_HMI.HMI_AliveCounter+1)&0x0F;
+  output(msg_HMI);
+  @sysvar::Status::HMI::FCW_Warning  = 1;
+  @sysvar::Status::HMI::WarningLevel = gCollisionRisk;
+}
+
+void sendFailSafeWarn()
+{
+  msg_HMI.FCW_Warning      = 0;
+  msg_HMI.AEB_Warning      = 1;
+  msg_HMI.FailSafe_Warning = 1;
+  msg_HMI.Override_Warning = 0;
+  msg_HMI.Warning_Level    = 3;
+  msg_HMI.HMI_AliveCounter = (msg_HMI.HMI_AliveCounter+1)&0x0F;
+  output(msg_HMI);
+  @sysvar::Status::HMI::AEB_Warning      = 1;
+  @sysvar::Status::HMI::FailSafe_Warning = 1;
+  @sysvar::Status::HMI::WarningLevel     = 3;
+}
+
+on stopMeasurement { write("[ADAS_ECU] Stopped. State=%d", gSystemState); }
+
+byte calcCRC_S()  { byte c=0;int i;for(i=0;i<7;i++)c^=msg_Steer.byte(i); return c; }
+byte calcCRC_B()  { byte c=0;int i;for(i=0;i<7;i++)c^=msg_Brake.byte(i); return c; }
+byte calcCRC_St() { byte c=0;int i;for(i=0;i<7;i++)c^=msg_Status.byte(i);return c; }
+byte calcCRC_D()  { byte c=0;int i;for(i=0;i<7;i++)c^=msg_Diag.byte(i);  return c; }

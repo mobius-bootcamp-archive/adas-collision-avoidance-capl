@@ -1,0 +1,84 @@
+/*@!Encoding:65001*/
+/*============================================================
+  File    : HMI_ECU.can
+  Node    : HMI_ECU
+  Project : ADAS_CollisionAvoidance
+  Panel 연동 sysvar (입력, 패널 Indicator 표시):
+    Status::ADAS::SystemState / TTC / CollisionRisk / FailSafeCode
+    Status::HMI::FCW_Warning / AEB_Warning / FailSafe_Warning / WarningLevel
+    Status::EPS::Ready / Fault
+    Status::ESC::Active / Intervention
+  * HMI_ECU는 sysvar를 직접 쓰지 않음.
+     sysvar는 ADAS_ECU 및 각 ECU 노드가 업데이트하며,
+     HMI_ECU는 CAN 메시지 수신 후 Write 로그 출력만 담당.
+     패널 Indicator는 sysvar에 직접 바인딩.
+============================================================*/
+variables
+{
+  int  gLastState      = -1;
+  int  gLastRisk       = -1;
+  int  gLastAEB        = -1;
+  int  gLastWarnLevel  = -1;
+}
+on start
+{
+  write("[HMI_ECU] Display node started. Panel indicators linked to sysvar.");
+  write("[HMI_ECU] Monitoring: Status::ADAS / HMI / EPS / ESC");
+}
+on message HMI_Warning
+{
+  int lvl;
+  lvl = this.Warning_Level;
+  if (this.FCW_Warning || this.AEB_Warning ||
+      this.FailSafe_Warning || lvl != gLastWarnLevel) {
+    write("================================================");
+    write("*** HMI WARNING  Level=%d", lvl);
+    if (this.FCW_Warning)      write(">>> FCW: COLLISION AHEAD");
+    if (this.AEB_Warning)      write(">>> AEB: EMERGENCY BRAKE");
+    if (this.FailSafe_Warning) write(">>> FAILSAFE ACTIVE");
+    if (this.Override_Warning) write(">>> DRIVER OVERRIDE");
+    write("================================================");
+    gLastWarnLevel = lvl;
+  }
+}
+on message ADAS_SystemStatus
+{
+  int s;
+  s = this.System_State;
+  if (s != gLastState) {
+    write("[HMI_ECU] State=%d  Risk=%d  TTC=%.2fs  Evasion=%d  Fusion=%d",
+          s, this.CollisionRisk, this.TTC_Value*0.01,
+          this.Evasion_Direction, this.SensorFusion_Valid);
+    gLastState = s;
+  }
+  if (this.CollisionRisk != gLastRisk) {
+    if      (this.CollisionRisk==2) write("[HMI_ECU] !! CRITICAL RISK  TTC=%.2fs", this.TTC_Value*0.01);
+    else if (this.CollisionRisk==1) write("[HMI_ECU] !! WARNING RISK   TTC=%.2fs", this.TTC_Value*0.01);
+    else                            write("[HMI_ECU] -- Risk cleared");
+    gLastRisk = this.CollisionRisk;
+  }
+}
+on message ADAS_BrakeCommand
+{
+  if (this.AEB_Active != gLastAEB) {
+    if (this.AEB_Active)
+      write("[HMI_ECU] !! AEB Level=%d Decel=%.2f m/s2",
+            this.AEB_Level, this.Target_Deceleration*0.01);
+    else
+      write("[HMI_ECU] AEB off");
+    gLastAEB = this.AEB_Active;
+  }
+}
+on message EPS_Status
+{
+  if (this.EPS_Fault)
+    write("[HMI_ECU] !! EPS Fault! Angle=%.2f deg", this.EPS_ActualAngle*0.01);
+}
+on message ESC_Status
+{
+  if (this.ESC_Active)
+    write("[HMI_ECU] ESC Intervention=%d  FL=%.1f FR=%.1f km/h",
+          this.ESC_Intervention,
+          this.Wheel_Speed_FL*0.1, this.Wheel_Speed_FR*0.1);
+}
+on stopMeasurement { write("[HMI_ECU] Stopped."); }

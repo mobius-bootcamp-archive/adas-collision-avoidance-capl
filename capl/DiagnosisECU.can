@@ -1,0 +1,81 @@
+﻿/*@!Encoding:65001*/
+/*============================================================
+  File    : DiagnosisECU.can
+  Node    : DiagnosisECU
+  Project : ADAS_CollisionAvoidance
+  Panel 연동 sysvar (출력):
+    Status::ADAS::FailSafeCode  - 패널 Text Indicator에 코드 표시
+  * DiagnosisECU는 sysvar를 직접 쓰지 않음.
+     FailSafeCode sysvar는 ADAS_ECU가 업데이트.
+============================================================*/
+
+variables
+{
+  int   gDTC_Log[64];
+  int   gDTC_Count     = 0;
+  int   gFSCount       = 0;
+  int   gEPS_FaultCnt  = 0;
+  dword gFaultStart    = 0;
+  int   gInFault       = 0;
+}
+
+on start
+{
+  write("[DiagnosisECU] Started. Monitoring fault codes.");
+  write("[DiagnosisECU] FailSafeCode panel indicator -> sysvar Status::ADAS::FailSafeCode");
+}
+
+on message ADAS_DiagnosticStatus
+{
+  dword ts;
+  ts = timeNow() / 100000; // -> ms
+  if (this.DTC_Present && gDTC_Count < 64) {
+    gDTC_Log[gDTC_Count++] = this.DTC_Code;
+    gFSCount++;
+    if (!gInFault) { gFaultStart=ts; gInFault=1; }
+    {
+      char sFSStr[24];
+      if      (this.FailSafe_Code==1) snprintf(sFSStr, elcount(sFSStr), "SensorDegraded");
+      else if (this.FailSafe_Code==2) snprintf(sFSStr, elcount(sFSStr), "SensorFault");
+      else if (this.FailSafe_Code==3) snprintf(sFSStr, elcount(sFSStr), "CommTimeout");
+      else                            snprintf(sFSStr, elcount(sFSStr), "CompositeFault");
+      write("[DiagnosisECU] !! DTC=0x%04X  Code=%d (%s)",
+            this.DTC_Code, this.FailSafe_Code, sFSStr);
+    }
+  } else if (!this.DTC_Present && gInFault) {
+    write("[DiagnosisECU] OK Fault cleared. Duration=%d ms", ts-gFaultStart);
+    gInFault=0;
+  }
+  if (this.Radar_Timeout)       write("[DiagnosisECU] !! RADAR TIMEOUT");
+  if (this.Camera_Timeout)      write("[DiagnosisECU] !! CAMERA TIMEOUT");
+  if (this.Sensor_Disagreement) write("[DiagnosisECU] !! SENSOR DISAGREEMENT");
+}
+
+on message ADAS_SystemStatus
+{
+  if (!this.SensorFusion_Valid)
+    write("[DiagnosisECU] !! SensorFusion invalid (State=%d)", this.System_State);
+}
+
+on message EPS_Status
+{
+  if (this.EPS_Fault) {
+    gEPS_FaultCnt++;
+    write("[DiagnosisECU] !! EPS Fault #%d  Angle=%.2f deg",
+          gEPS_FaultCnt, this.EPS_ActualAngle*0.01);
+  }
+}
+
+on stopMeasurement
+{
+  int i;
+  write("============================================");
+  write("   DIAGNOSIS REPORT");
+  write("============================================");
+  write("  FailSafe Events  : %d", gFSCount);
+  write("  EPS Fault Events : %d", gEPS_FaultCnt);
+  write("  DTC Count        : %d", gDTC_Count);
+  for(i=0;i<gDTC_Count&&i<64;i++)
+    write("    [%02d] DTC=0x%04X", i, gDTC_Log[i]);
+  write("============================================");
+}

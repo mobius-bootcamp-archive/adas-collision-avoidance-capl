@@ -1,0 +1,176 @@
+/*@!Encoding:65001*/
+/*============================================================
+  File    : SimulatorNode.can
+  Node    : SimulatorNode
+  Project : ADAS_CollisionAvoidance
+
+  Panel 연동 sysvar (입력):
+    Sim::Driver::SteeringTorque  [-100.0 ~ 100.0 Nm]
+    Sim::Driver::BrakePressure   [0 ~ 100 %]
+    Sim::Driver::AccelPedal      [0 ~ 100 %]
+    Sim::Driver::Override        [0 / 1]
+
+  Panel 연동 sysvar (표시):
+    Status::ADAS::SystemState
+    Status::ADAS::TTC
+    Status::ADAS::CollisionRisk
+    Status::HMI::*
+============================================================*/
+
+includes
+{
+}
+
+variables
+{
+  message DriverInput  msg_DriverInput;
+  msTimer tmr_DriverInput;
+
+  float  gSteeringTorque  = 0.0;
+  int    gBrakePressure   = 0;
+  int    gAccelPedal      = 0;
+  int    gDriverOverride  = 0;
+  byte   gAliveCounter    = 0;
+
+  int    gLastSystemState = -1;
+  int    gLastAEB_Active  = -1;
+}
+
+on start
+{
+  // sysvar 초기값 반영
+  gSteeringTorque = (float)@sysvar::Sim::Driver::SteeringTorque;
+  gBrakePressure  = @sysvar::Sim::Driver::BrakePressure;
+  gAccelPedal     = @sysvar::Sim::Driver::AccelPedal;
+  gDriverOverride = @sysvar::Sim::Driver::Override;
+
+  msg_DriverInput.dir = TX;
+  setTimer(tmr_DriverInput, 20);
+  write("[SimulatorNode] Started. Panel sysvar linked.");
+}
+
+/*----------------------------------------------------------
+  sysvar 핸들러 - Panel TrackBar/Switch 변경 시 즉시 반영
+----------------------------------------------------------*/
+on sysvar Sim::Driver::SteeringTorque
+{
+  gSteeringTorque = (float)@sysvar::Sim::Driver::SteeringTorque;
+  // 조향 토크 임계값(+-3Nm) 초과 시 Override 자동 설정
+  gDriverOverride = (abs(gSteeringTorque) >= 3.0) ? 1 : gDriverOverride;
+  @sysvar::Sim::Driver::Override = gDriverOverride;
+}
+
+on sysvar Sim::Driver::BrakePressure
+{
+  gBrakePressure  = @sysvar::Sim::Driver::BrakePressure;
+  // 브레이크 10% 초과 시 Override 자동 설정
+  gDriverOverride = (gBrakePressure > 10) ? 1 : gDriverOverride;
+  @sysvar::Sim::Driver::Override = gDriverOverride;
+}
+
+on sysvar Sim::Driver::AccelPedal
+{
+  gAccelPedal = @sysvar::Sim::Driver::AccelPedal;
+}
+
+on sysvar Sim::Driver::Override
+{
+  gDriverOverride = @sysvar::Sim::Driver::Override;
+  if (gDriverOverride == 0) {
+    // Override 해제 시 조향/브레이크도 0으로 초기화
+    gSteeringTorque = 0.0;
+    gBrakePressure  = 0;
+    @sysvar::Sim::Driver::SteeringTorque = 0.0;
+    @sysvar::Sim::Driver::BrakePressure  = 0;
+  }
+  write("[SimulatorNode] Override=%d", gDriverOverride);
+}
+
+/*----------------------------------------------------------
+  20ms 주기 TX
+----------------------------------------------------------*/
+on timer tmr_DriverInput
+{
+  gAliveCounter = (gAliveCounter + 1) & 0x0F;
+
+  msg_DriverInput.Driver_SteeringTorque = (word)(gSteeringTorque / 0.1);
+  msg_DriverInput.Driver_BrakePressure  = (byte)gBrakePressure;
+  msg_DriverInput.Driver_AccelPedal     = (byte)gAccelPedal;
+  msg_DriverInput.Driver_Override       = (byte)gDriverOverride;
+  msg_DriverInput.Driver_AliveCounter   = gAliveCounter;
+  msg_DriverInput.Driver_CRC            = calcCRC_DriverInput();
+
+  output(msg_DriverInput);
+  setTimer(tmr_DriverInput, 20);
+}
+
+/*----------------------------------------------------------
+  RX: ADAS_SystemStatus -> sysvar 업데이트 (패널 표시)
+----------------------------------------------------------*/
+on message CAN1.ADAS_SystemStatus
+{
+  int curState; float ttc;
+  curState = this.System_State;
+  ttc      = this.TTC_Value * 0.01;
+
+  @sysvar::Status::ADAS::SystemState    = curState;
+  @sysvar::Status::ADAS::TTC            = ttc;
+  @sysvar::Status::ADAS::CollisionRisk  = this.CollisionRisk;
+  @sysvar::Status::ADAS::EvasionDir     = this.Evasion_Direction;
+  @sysvar::Status::ADAS::SensorFusionValid = this.SensorFusion_Valid;
+
+  if (curState != gLastSystemState) {
+    switch(curState) {
+      case 0: write("[SimulatorNode] ADAS -> STANDBY");  break;
+      case 1: write("[SimulatorNode] ADAS -> ARMED");    break;
+      case 2: write("[SimulatorNode] ADAS -> RISK  TTC=%.2fs", ttc); break;
+      case 3: write("[SimulatorNode] ADAS -> EVASIVE");  break;
+      case 4: write("[SimulatorNode] ADAS -> FAILSAFE"); break;
+    }
+    gLastSystemState = curState;
+  }
+}
+
+on message ADAS_DiagnosticStatus
+{
+  @sysvar::Status::ADAS::FailSafeCode = this.FailSafe_Code;
+}
+
+on message ADAS_BrakeCommand
+{
+  int aeb;
+  aeb= this.AEB_Active;
+  if (aeb != gLastAEB_Active) {
+    if (aeb == 1)
+      write("[SimulatorNode] AEB! Level=%d Decel=%.2f m/s2",
+            this.AEB_Level, this.Target_Deceleration * 0.01);
+    else
+      write("[SimulatorNode] AEB deactivated");
+    gLastAEB_Active = aeb;
+  }
+}
+
+on message HMI_Warning
+{
+  @sysvar::Status::HMI::FCW_Warning      = this.FCW_Warning;
+  @sysvar::Status::HMI::AEB_Warning      = this.AEB_Warning;
+  @sysvar::Status::HMI::FailSafe_Warning = this.FailSafe_Warning;
+  @sysvar::Status::HMI::Override_Warning = this.Override_Warning;
+  @sysvar::Status::HMI::WarningLevel     = this.Warning_Level;
+
+  if (this.FCW_Warning)      write("[SimulatorNode] *** FCW WARNING ***");
+  if (this.AEB_Warning)      write("[SimulatorNode] *** AEB WARNING ***");
+  if (this.FailSafe_Warning) write("[SimulatorNode] *** FAILSAFE WARNING ***");
+}
+
+on stopMeasurement
+{
+  write("[SimulatorNode] Stopped.");
+}
+
+byte calcCRC_DriverInput()
+{
+  byte crc = 0; byte i;
+  for (i = 0; i < 7; i++) crc ^= msg_DriverInput.byte(i);
+  return crc;
+}

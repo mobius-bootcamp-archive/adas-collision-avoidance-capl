@@ -1,0 +1,122 @@
+/*@!Encoding:65001*/
+/*============================================================
+  File    : SensorECU_Camera.can
+  Node    : SensorECU_Camera
+  Project : ADAS_CollisionAvoidance
+
+  Panel 연동 sysvar (입력):
+    Sim::Camera::Distance        [0.0 ~ 250.0 m]
+    Sim::Camera::ObjectDetected  [0 / 1]
+    Sim::Camera::LeftLaneAvail   [0 / 1]
+    Sim::Camera::RightLaneAvail  [0 / 1]
+    Sim::Camera::LaneWidth       [0.0 ~ 6.0 m]
+    Sim::Camera::Status          [0=OK / 1=Degraded / 2=Fault]
+    Sim::FaultInject::CameraDropEnable / CameraDropRate / CameraDelayMs
+============================================================*/
+
+variables
+{
+  message CameraSensorData  msg_Camera;
+  msTimer tmr_Camera;
+  msTimer tmr_CameraDelay;
+
+  byte   gObjectDetected  = 1;
+  float  gDistance        = 115.0;
+  byte   gLeftLane        = 1;
+  byte   gRightLane       = 0;
+  float  gLaneWidth       = 3.5;
+  byte   gStatus          = 0;
+  byte   gAliveCounter    = 0;
+
+  int    gDropEnable      = 0;
+  int    gDropRate        = 0;
+  int    gDelayMs         = 0;
+}
+
+on start
+{
+  gObjectDetected = (byte)@sysvar::Sim::Camera::ObjectDetected;
+  gDistance       = (float)@sysvar::Sim::Camera::Distance;
+  gLeftLane       = (byte)@sysvar::Sim::Camera::LeftLaneAvail;
+  gRightLane      = (byte)@sysvar::Sim::Camera::RightLaneAvail;
+  gLaneWidth      = (float)@sysvar::Sim::Camera::LaneWidth;
+  gStatus         = (byte)@sysvar::Sim::Camera::Status;
+  gDropEnable     = @sysvar::Sim::FaultInject::CameraDropEnable;
+  gDropRate       = @sysvar::Sim::FaultInject::CameraDropRate;
+  gDelayMs        = @sysvar::Sim::FaultInject::CameraDelayMs;
+
+  setTimer(tmr_Camera, 50);
+  write("[SensorECU_Camera] Started. sysvar linked.");
+}
+
+on sysvar Sim::Camera::ObjectDetected { gObjectDetected = (byte)@sysvar::Sim::Camera::ObjectDetected; }
+on sysvar Sim::Camera::Distance       { gDistance = (float)@sysvar::Sim::Camera::Distance; }
+
+on sysvar Sim::Camera::LeftLaneAvail
+{
+  gLeftLane = (byte)@sysvar::Sim::Camera::LeftLaneAvail;
+  write("[SensorECU_Camera] LeftLane=%d", gLeftLane);
+}
+
+on sysvar Sim::Camera::RightLaneAvail
+{
+  gRightLane = (byte)@sysvar::Sim::Camera::RightLaneAvail;
+  write("[SensorECU_Camera] RightLane=%d", gRightLane);
+}
+
+on sysvar Sim::Camera::LaneWidth { gLaneWidth = (float)@sysvar::Sim::Camera::LaneWidth; }
+
+on sysvar Sim::Camera::Status
+{
+  char sStatusStr[16];
+  gStatus = (byte)@sysvar::Sim::Camera::Status;
+  if      (gStatus == 0) snprintf(sStatusStr, elcount(sStatusStr), "OK");
+  else if (gStatus == 1) snprintf(sStatusStr, elcount(sStatusStr), "Degraded");
+  else                   snprintf(sStatusStr, elcount(sStatusStr), "Fault");
+  write("[SensorECU_Camera] Status -> %d (%s)", gStatus, sStatusStr);
+}
+
+on sysvar Sim::FaultInject::CameraDropEnable
+{
+  gDropEnable = @sysvar::Sim::FaultInject::CameraDropEnable;
+  write("[SensorECU_Camera] Drop=%d Rate=%d%%", gDropEnable, gDropRate);
+}
+on sysvar Sim::FaultInject::CameraDropRate  { gDropRate = @sysvar::Sim::FaultInject::CameraDropRate; }
+on sysvar Sim::FaultInject::CameraDelayMs   { gDelayMs  = @sysvar::Sim::FaultInject::CameraDelayMs; }
+
+on timer tmr_Camera
+{
+  gAliveCounter = (gAliveCounter + 1) & 0x0F;
+
+  if (gDropEnable && gDropRate > 0) {
+    if (random(100) < gDropRate) { setTimer(tmr_Camera, 50); return; }
+  }
+
+  packCameraMsg();
+
+  if (gDelayMs > 0) setTimer(tmr_CameraDelay, gDelayMs);
+  else              output(msg_Camera);
+
+  setTimer(tmr_Camera, 50);
+}
+
+on timer tmr_CameraDelay { output(msg_Camera); }
+
+void packCameraMsg()
+{
+  msg_Camera.Camera_ObjectDetected     = gObjectDetected;
+  msg_Camera.Camera_Distance           = (word)(gDistance / 0.1);
+  msg_Camera.Camera_LeftLaneAvailable  = gLeftLane;
+  msg_Camera.Camera_RightLaneAvailable = gRightLane;
+  msg_Camera.Camera_LaneWidth          = (byte)(gLaneWidth / 0.1);
+  msg_Camera.Camera_Status             = gStatus;
+  msg_Camera.Camera_AliveCounter       = gAliveCounter;
+  msg_Camera.Camera_CRC                = calcCRC_Camera();
+}
+
+on stopMeasurement { write("[SensorECU_Camera] Stopped."); }
+
+byte calcCRC_Camera()
+{
+  byte c=0; int i; for(i=0;i<7;i++) c^=msg_Camera.byte(i); return c;
+}

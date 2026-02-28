@@ -1,0 +1,83 @@
+﻿/*@!Encoding:65001*/
+/*============================================================
+  File    : EPS_ECU.can
+  Node    : EPS_ECU
+  Project : ADAS_CollisionAvoidance
+  Panel 연동 sysvar:
+    입력: Ctrl::EPS::FaultInject  [0/1] - 패널 버튼으로 EPS Fault 주입
+    출력: Status::EPS::Ready      [0/1]
+          Status::EPS::ActualAngle [-30.0~30.0 deg]
+          Status::EPS::Fault       [0/1]
+============================================================*/
+variables
+{
+  message EPS_Status  msg_EPS;
+  msTimer tmr_EPS;
+  float  gActualAngle  = 0.0;
+  float  gTargetAngle  = 0.0;
+  int    gReady        = 1;
+  int    gFault        = 0;
+  int    gTorque       = 0;
+  byte   gAliveCounter = 0;
+  const float TRACK_RATE = 0.5; // deg per 50ms
+}
+on start
+{
+  // Fault Inject 초기화
+  gFault = @sysvar::Ctrl::EPS::FaultInject;
+  gReady = gFault ? 0 : 1;
+  @sysvar::Status::EPS::Ready       = gReady;
+  @sysvar::Status::EPS::ActualAngle = 0.0;
+  @sysvar::Status::EPS::Fault       = gFault;
+  setTimer(tmr_EPS, 50);
+  write("[EPS_ECU] Started. Ready=%d", gReady);
+}
+/*----------------------------------------------------------
+  sysvar: 패널 Fault Inject 버튼
+----------------------------------------------------------*/
+on sysvar Ctrl::EPS::FaultInject
+{
+  gFault = @sysvar::Ctrl::EPS::FaultInject;
+  gReady = gFault ? 0 : 1;
+  @sysvar::Status::EPS::Ready = gReady;
+  @sysvar::Status::EPS::Fault = gFault;
+  write("[EPS_ECU] FaultInject=%d -> Ready=%d", gFault, gReady);
+}
+on message ADAS_SteeringCommand
+{
+  if (this.Steering_Active) {
+    gTargetAngle = this.Target_SteeringAngle * 0.01;
+    gTorque      = this.Steering_Torque;
+  } else {
+    gTargetAngle = 0.0;
+    gTorque      = 0;
+  }
+}
+on timer tmr_EPS
+{
+  float delta;
+  delta = gTargetAngle - gActualAngle;
+  gAliveCounter = (gAliveCounter+1) & 0x0F;
+  // 목표값 추종
+  if (abs(delta) <= TRACK_RATE) gActualAngle = gTargetAngle;
+  else gActualAngle += (delta>0) ? TRACK_RATE : -TRACK_RATE;
+  // 범위 초과 시 Fault
+  if (gActualAngle >  30.0) { gActualAngle =  30.0; gFault=1; gReady=0;
+    @sysvar::Ctrl::EPS::FaultInject = 1; }
+  if (gActualAngle < -30.0) { gActualAngle = -30.0; gFault=1; gReady=0;
+    @sysvar::Ctrl::EPS::FaultInject = 1; }
+  // sysvar 업데이트 (패널 게이지 표시)
+  @sysvar::Status::EPS::ActualAngle = gActualAngle;
+  @sysvar::Status::EPS::Ready       = gReady;
+  @sysvar::Status::EPS::Fault       = gFault;
+  msg_EPS.EPS_Ready        = gReady;
+  msg_EPS.EPS_ActualAngle  = (int)(gActualAngle/0.01);
+  msg_EPS.EPS_Torque       = gTorque;
+  msg_EPS.EPS_Fault        = gFault;
+  msg_EPS.EPS_AliveCounter = gAliveCounter;
+  msg_EPS.EPS_CRC          = calcCRC_EPS();
+  output(msg_EPS);
+  setTimer(tmr_EPS, 50);
+}
+on stopMeasurement { write("[EPS_ECU] FinalAngle=%.2f", gActualAngle); }
+byte calcCRC_EPS() { byte c=0;int i;for(i=0;i<7;i++)c^=msg_EPS.byte(i);return c; }

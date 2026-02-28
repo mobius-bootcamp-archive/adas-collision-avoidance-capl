@@ -1,0 +1,98 @@
+﻿/*@!Encoding:65001*/
+/*============================================================
+  File    : ChassisECU.can
+  Node    : ChassisECU
+  Project : ADAS_CollisionAvoidance
+  Panel 연동 sysvar:
+    입력: Sim::Vehicle::Speed   [0~250 km/h] - TrackBar
+          Sim::Vehicle::Gear    [0~3]         - Selector
+          Sim::Vehicle::IGN     [0/1]         - Switch
+    * Speed는 패널 직접 입력 OR ChassisECU 물리 계산 중 하나 사용
+       (패널 값이 0이면 물리 계산 사용, 0 이상이면 패널 Override)
+============================================================*/
+variables
+{
+  message VehicleStatus  msg_Vehicle;
+  msTimer tmr_Vehicle;
+  float  gSpeed        = 80.0;
+  int    gGear         = 3;
+  int    gIGN          = 1;
+  float  gYawRate      = 0.0;
+  float  gLatAccel     = 0.0;
+  byte   gAliveCounter = 0;
+  float  gTargetDecel  = 0.0;
+  int    gAccelPedal   = 0;
+  int    gBrakePedal   = 0;
+  int    gPanelSpeedOverride = 0; // 1=패널 Speed 직접 입력 모드
+  const float DT = 0.1;
+}
+on start
+{
+  // 패널 sysvar 초기값 로드
+  float sv;
+  sv = (float)@sysvar::Sim::Vehicle::Speed;
+  if (sv > 0.0) { gSpeed = sv; gPanelSpeedOverride = 1; }
+  gGear = @sysvar::Sim::Vehicle::Gear;
+  gIGN  = @sysvar::Sim::Vehicle::IGN;
+  setTimer(tmr_Vehicle, 100);
+  write("[ChassisECU] Started. Speed=%.1f Gear=%d IGN=%d", gSpeed, gGear, gIGN);
+}
+/*----------------------------------------------------------
+  sysvar 핸들러 ----------------------------------------------------------*/
+on sysvar Sim::Vehicle::Speed
+{
+  float sv;
+  sv = (float)@sysvar::Sim::Vehicle::Speed;
+  if (sv >= 0.0) {
+    gSpeed = sv;
+    gPanelSpeedOverride = (sv > 0.0) ? 1 : 0;
+  }
+}
+on sysvar Sim::Vehicle::Gear
+{
+  gGear = @sysvar::Sim::Vehicle::Gear;
+  write("[ChassisECU] Gear -> %d", gGear);
+}
+on sysvar Sim::Vehicle::IGN
+{
+  gIGN = @sysvar::Sim::Vehicle::IGN;
+  if (!gIGN) { gSpeed = 0.0; @sysvar::Sim::Vehicle::Speed = 0.0; }
+  write("[ChassisECU] IGN=%d", gIGN);
+}
+on message ADAS_BrakeCommand
+{
+  gTargetDecel = this.AEB_Active ? (this.Target_Deceleration * 0.01) : 0.0;
+}
+on message DriverInput
+{
+  gAccelPedal = this.Driver_AccelPedal;
+  gBrakePedal = this.Driver_BrakePressure;
+}
+on timer tmr_Vehicle
+{
+  gAliveCounter = (gAliveCounter+1) & 0x0F;
+  // 물리 계산 (패널 Override 모드가 아닐 때만)
+  if (!gPanelSpeedOverride) {
+    float accel, brake, adasBr;
+    accel = gAccelPedal * 0.02;
+    brake = gBrakePedal * 0.05;
+    adasBr = gTargetDecel * 0.36 * DT;
+    gSpeed += accel - brake - adasBr;
+    if (gSpeed < 0.0)   gSpeed = 0.0;
+    if (gSpeed > 250.0) gSpeed = 250.0;
+    // 패널 게이지 표시 업데이트
+    @sysvar::Sim::Vehicle::Speed = gSpeed;
+  }
+
+  msg_Vehicle.Vehicle_Speed        = (word)(gSpeed/0.1);
+  msg_Vehicle.Vehicle_Gear         = gGear;
+  msg_Vehicle.IGN_Status           = gIGN;
+  msg_Vehicle.Vehicle_YawRate      = (int)(gYawRate/0.1);
+  msg_Vehicle.Vehicle_LateralAccel = (int)(gLatAccel/0.01);
+  msg_Vehicle.Vehicle_AliveCounter = gAliveCounter;
+  msg_Vehicle.Vehicle_CRC          = calcCRC_V();
+  output(msg_Vehicle);
+  setTimer(tmr_Vehicle, 100);
+}
+on stopMeasurement { write("[ChassisECU] FinalSpeed=%.1f", gSpeed); }
+byte calcCRC_V() { byte c=0;int i;for(i=0;i<7;i++)c^=msg_Vehicle.byte(i);return c; }

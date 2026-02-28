@@ -1,0 +1,280 @@
+VERSION ""
+
+
+NS_ : 
+	NS_DESC_
+	CM_
+	BA_DEF_
+	BA_
+	VAL_
+	CAT_DEF_
+	CAT_
+	FILTER
+	BA_DEF_DEF_
+	EV_DATA_
+	ENVVAR_DATA_
+	SGTYPE_
+	SGTYPE_VAL_
+	BA_DEF_SGTYPE_
+	BA_SGTYPE_
+	SIG_TYPE_REF_
+	VAL_TABLE_
+	SIG_GROUP_
+	SIG_VALTYPE_
+	SIGTYPE_VALTYPE_
+	BO_TX_BU_
+	BA_DEF_REL_
+	BA_REL_
+	BA_DEF_DEF_REL_
+	BU_SG_REL_
+	BU_EV_REL_
+	BU_BO_REL_
+	SG_MUL_VAL_
+
+BS_:
+
+BU_: SimulatorNode SensorECU_Radar SensorECU_Camera ADAS_ECU EPS_ECU ESC_ECU ChassisECU DiagnosisECU HMI_ECU
+
+
+BO_ 256 RadarSensorData: 8 SensorECU_Radar
+ SG_ Radar_Distance : 0|16@1+ (0.1,0) [0|250] "m"  ADAS_ECU
+ SG_ Radar_RelativeSpeed : 16|16@1- (0.1,0) [-200|200] "km/h"  ADAS_ECU
+ SG_ Radar_Status : 32|2@1+ (1,0) [0|2] ""  ADAS_ECU
+ SG_ Radar_ObjectType : 34|2@1+ (1,0) [0|3] ""  ADAS_ECU
+ SG_ Radar_AliveCounter : 36|4@1+ (1,0) [0|15] ""  ADAS_ECU
+ SG_ Radar_CRC : 56|8@1+ (1,0) [0|255] ""  ADAS_ECU
+
+BO_ 272 CameraSensorData: 8 SensorECU_Camera
+ SG_ Camera_ObjectDetected : 0|1@1+ (1,0) [0|1] ""  ADAS_ECU
+ SG_ Camera_Distance : 1|15@1+ (0.1,0) [0|250] "m"  ADAS_ECU
+ SG_ Camera_LeftLaneAvailable : 16|1@1+ (1,0) [0|1] ""  ADAS_ECU
+ SG_ Camera_RightLaneAvailable : 17|1@1+ (1,0) [0|1] ""  ADAS_ECU
+ SG_ Camera_LaneWidth : 18|6@1+ (0.1,0) [0|6] "m"  ADAS_ECU
+ SG_ Camera_Status : 24|2@1+ (1,0) [0|2] ""  ADAS_ECU
+ SG_ Camera_AliveCounter : 26|4@1+ (1,0) [0|15] ""  ADAS_ECU
+ SG_ Camera_CRC : 56|8@1+ (1,0) [0|255] ""  ADAS_ECU
+
+BO_ 512 VehicleStatus: 8 ChassisECU
+ SG_ Vehicle_Speed : 0|16@1+ (0.1,0) [0|255] "km/h"  ADAS_ECU,HMI_ECU
+ SG_ Vehicle_Gear : 16|2@1+ (1,0) [0|3] ""  ADAS_ECU
+ SG_ IGN_Status : 18|1@1+ (1,0) [0|1] ""  ADAS_ECU,HMI_ECU
+ SG_ Vehicle_YawRate : 19|13@1- (0.1,0) [-100|100] "deg/s"  ADAS_ECU,ESC_ECU
+ SG_ Vehicle_LateralAccel : 32|12@1- (0.01,0) [-20|20] "m/s2"  ADAS_ECU,ESC_ECU
+ SG_ Vehicle_AliveCounter : 44|4@1+ (1,0) [0|15] ""  ADAS_ECU
+ SG_ Vehicle_CRC : 56|8@1+ (1,0) [0|255] ""  ADAS_ECU
+
+BO_ 528 DriverInput: 8 SimulatorNode
+ SG_ Driver_SteeringTorque : 0|16@1+ (0.1,0) [0|100] "Nm"  ADAS_ECU
+ SG_ Driver_BrakePressure : 16|8@1+ (1,0) [0|100] "%"  ADAS_ECU,ChassisECU
+ SG_ Driver_AccelPedal : 24|8@1+ (1,0) [0|100] "%"  ChassisECU
+ SG_ Driver_Override : 32|1@1+ (1,0) [0|1] ""  ADAS_ECU
+ SG_ Driver_AliveCounter : 33|4@1+ (1,0) [0|15] ""  ADAS_ECU
+ SG_ Driver_CRC : 56|8@1+ (1,0) [0|255] ""  ADAS_ECU
+
+BO_ 768 ADAS_SteeringCommand: 8 ADAS_ECU
+ SG_ Target_SteeringAngle : 0|16@1- (0.01,0) [-5|5] "deg"  EPS_ECU
+ SG_ Steering_Direction : 16|2@1+ (1,0) [0|2] ""  EPS_ECU
+ SG_ Steering_Torque : 18|8@1+ (1,0) [0|100] "%"  EPS_ECU
+ SG_ Steering_Active : 26|1@1+ (1,0) [0|1] ""  EPS_ECU
+ SG_ Steering_AliveCounter : 27|4@1+ (1,0) [0|15] ""  EPS_ECU
+ SG_ Steering_CRC : 56|8@1+ (1,0) [0|255] ""  EPS_ECU
+
+BO_ 784 ADAS_BrakeCommand: 8 ADAS_ECU
+ SG_ Target_Deceleration : 0|16@1+ (0.01,0) [0|10] "m/s2"  ESC_ECU,ChassisECU
+ SG_ AEB_Active : 16|1@1+ (1,0) [0|1] ""  ESC_ECU,HMI_ECU
+ SG_ AEB_Level : 17|2@1+ (1,0) [0|3] ""  ESC_ECU
+ SG_ Brake_AliveCounter : 19|4@1+ (1,0) [0|15] ""  ESC_ECU
+ SG_ Brake_CRC : 56|8@1+ (1,0) [0|255] ""  ESC_ECU
+
+BO_ 800 ADAS_SystemStatus: 8 ADAS_ECU
+ SG_ System_State : 0|3@1+ (1,0) [0|4] ""  HMI_ECU,DiagnosisECU
+ SG_ TTC_Value : 3|13@1+ (0.01,0) [0|10] "s"  HMI_ECU
+ SG_ CollisionRisk : 16|2@1+ (1,0) [0|2] ""  HMI_ECU
+ SG_ SensorFusion_Valid : 18|1@1+ (1,0) [0|1] ""  DiagnosisECU
+ SG_ Evasion_Direction : 19|2@1+ (1,0) [0|2] ""  HMI_ECU
+ SG_ Status_AliveCounter : 21|4@1+ (1,0) [0|15] ""  HMI_ECU
+ SG_ Status_CRC : 56|8@1+ (1,0) [0|255] ""  HMI_ECU
+
+BO_ 816 ADAS_DiagnosticStatus: 8 ADAS_ECU
+ SG_ FailSafe_Code : 0|3@1+ (1,0) [0|4] ""  HMI_ECU,DiagnosisECU
+ SG_ DTC_Present : 3|1@1+ (1,0) [0|1] ""  DiagnosisECU
+ SG_ DTC_Code : 4|16@1+ (1,0) [0|65535] ""  DiagnosisECU
+ SG_ Radar_Timeout : 20|1@1+ (1,0) [0|1] ""  DiagnosisECU
+ SG_ Camera_Timeout : 21|1@1+ (1,0) [0|1] ""  DiagnosisECU
+ SG_ Sensor_Disagreement : 22|1@1+ (1,0) [0|1] ""  DiagnosisECU
+ SG_ Diag_AliveCounter : 23|4@1+ (1,0) [0|15] ""  DiagnosisECU
+ SG_ Diag_CRC : 56|8@1+ (1,0) [0|255] ""  DiagnosisECU
+
+BO_ 1024 HMI_Warning: 8 ADAS_ECU
+ SG_ FCW_Warning : 0|1@1+ (1,0) [0|1] ""  HMI_ECU
+ SG_ AEB_Warning : 1|1@1+ (1,0) [0|1] ""  HMI_ECU
+ SG_ FailSafe_Warning : 2|1@1+ (1,0) [0|1] ""  HMI_ECU
+ SG_ Override_Warning : 3|1@1+ (1,0) [0|1] ""  HMI_ECU
+ SG_ Warning_Text_ID : 4|8@1+ (1,0) [0|255] ""  HMI_ECU
+ SG_ Warning_Level : 12|2@1+ (1,0) [0|3] ""  HMI_ECU
+ SG_ HMI_AliveCounter : 14|4@1+ (1,0) [0|15] ""  HMI_ECU
+
+BO_ 1040 EPS_Status: 8 EPS_ECU
+ SG_ EPS_Ready : 0|1@1+ (1,0) [0|1] ""  ADAS_ECU
+ SG_ EPS_ActualAngle : 1|16@1- (0.01,0) [-30|30] "deg"  ADAS_ECU
+ SG_ EPS_Torque : 17|8@1+ (1,0) [0|100] "%"  ADAS_ECU
+ SG_ EPS_Fault : 25|1@1+ (1,0) [0|1] ""  ADAS_ECU,DiagnosisECU
+ SG_ EPS_AliveCounter : 26|4@1+ (1,0) [0|15] ""  ADAS_ECU
+ SG_ EPS_CRC : 56|8@1+ (1,0) [0|255] ""  ADAS_ECU
+
+BO_ 1056 ESC_Status: 8 ESC_ECU
+ SG_ ESC_Active : 0|1@1+ (1,0) [0|1] ""  ADAS_ECU,HMI_ECU
+ SG_ ESC_Ready : 1|1@1+ (1,0) [0|1] ""  ADAS_ECU
+ SG_ ESC_Intervention : 2|2@1+ (1,0) [0|3] ""  ADAS_ECU
+ SG_ Wheel_Speed_FL : 4|12@1+ (0.1,0) [0|300] "km/h"  ADAS_ECU
+ SG_ Wheel_Speed_FR : 16|12@1+ (0.1,0) [0|300] "km/h"  ADAS_ECU
+ SG_ ESC_AliveCounter : 28|4@1+ (1,0) [0|15] ""  ADAS_ECU
+ SG_ ESC_CRC : 56|8@1+ (1,0) [0|255] ""  ADAS_ECU
+
+
+
+CM_ BO_ 256 "Radar sensor data including distance, relative speed, object type, and sensor status";
+CM_ SG_ 256 Radar_Distance "Distance to front object measured by radar (0-250m, resolution 0.1m)";
+CM_ SG_ 256 Radar_RelativeSpeed "Relative speed to front object (-200 to +200 km/h, resolution 0.1 km/h)";
+CM_ SG_ 256 Radar_Status "Radar sensor health status: 0=OK, 1=Degraded, 2=Fault";
+CM_ SG_ 256 Radar_ObjectType "Type of detected object: 0=None, 1=Vehicle, 2=Pedestrian, 3=Unknown";
+CM_ SG_ 256 Radar_AliveCounter "Rolling counter for message alive monitoring (0-15)";
+CM_ SG_ 256 Radar_CRC "CRC checksum for message integrity verification";
+CM_ BO_ 272 "Camera sensor data including object detection, lane availability, and sensor status";
+CM_ SG_ 272 Camera_ObjectDetected "Object detection flag: 0=No object, 1=Object detected";
+CM_ SG_ 272 Camera_Distance "Distance to detected object (0-250m, resolution 0.1m)";
+CM_ SG_ 272 Camera_LeftLaneAvailable "Left lane change availability: 0=Not available, 1=Available";
+CM_ SG_ 272 Camera_RightLaneAvailable "Right lane change availability: 0=Not available, 1=Available";
+CM_ SG_ 272 Camera_LaneWidth "Current lane width (0-6m, resolution 0.1m)";
+CM_ SG_ 272 Camera_Status "Camera sensor health status: 0=OK, 1=Degraded, 2=Fault";
+CM_ SG_ 272 Camera_AliveCounter "Rolling counter for message alive monitoring (0-15)";
+CM_ SG_ 272 Camera_CRC "CRC checksum for message integrity verification";
+CM_ BO_ 512 "Vehicle status information including speed, gear, ignition, and vehicle dynamics";
+CM_ SG_ 512 Vehicle_Speed "Current vehicle speed (0-255 km/h, resolution 0.1 km/h)";
+CM_ SG_ 512 Vehicle_Gear "Current gear position: 0=P, 1=R, 2=N, 3=D";
+CM_ SG_ 512 IGN_Status "Ignition status: 0=OFF, 1=ON";
+CM_ SG_ 512 Vehicle_YawRate "Vehicle yaw rate (-100 to +100 deg/s, resolution 0.1 deg/s)";
+CM_ SG_ 512 Vehicle_LateralAccel "Vehicle lateral acceleration (-20 to +20 m/s2, resolution 0.01 m/s2)";
+CM_ SG_ 512 Vehicle_AliveCounter "Rolling counter for message alive monitoring (0-15)";
+CM_ SG_ 512 Vehicle_CRC "CRC checksum for message integrity verification";
+CM_ BO_ 528 "Driver input signals including steering torque, brake/accel pedal, and override status";
+CM_ SG_ 528 Driver_SteeringTorque "Driver steering wheel torque input (0-100 Nm, resolution 0.1 Nm)";
+CM_ SG_ 528 Driver_BrakePressure "Driver brake pedal pressure (0-100%, resolution 1%)";
+CM_ SG_ 528 Driver_AccelPedal "Driver accelerator pedal position (0-100%, resolution 1%)";
+CM_ SG_ 528 Driver_Override "Driver override detection flag: 0=No override, 1=Override active";
+CM_ SG_ 528 Driver_AliveCounter "Rolling counter for message alive monitoring (0-15)";
+CM_ SG_ 528 Driver_CRC "CRC checksum for message integrity verification";
+CM_ BO_ 768 "ADAS steering command to EPS including target angle, direction, and torque";
+CM_ SG_ 768 Target_SteeringAngle "Target steering angle command (-5 to +5 deg, resolution 0.01 deg)";
+CM_ SG_ 768 Steering_Direction "Steering direction: 0=Straight, 1=Left, 2=Right";
+CM_ SG_ 768 Steering_Torque "Steering torque level (0-100%, resolution 1%)";
+CM_ SG_ 768 Steering_Active "Steering command active flag: 0=Inactive, 1=Active";
+CM_ SG_ 768 Steering_AliveCounter "Rolling counter for message alive monitoring (0-15)";
+CM_ SG_ 768 Steering_CRC "CRC checksum for message integrity verification";
+CM_ BO_ 784 "ADAS brake command to ESC including deceleration target and AEB status";
+CM_ SG_ 784 Target_Deceleration "Target deceleration (0-10 m/s2, resolution 0.01 m/s2)";
+CM_ SG_ 784 AEB_Active "Automatic Emergency Braking active flag: 0=Inactive, 1=Active";
+CM_ SG_ 784 AEB_Level "AEB intensity level: 0=None, 1=Light, 2=Medium, 3=Full";
+CM_ SG_ 784 Brake_AliveCounter "Rolling counter for message alive monitoring (0-15)";
+CM_ SG_ 784 Brake_CRC "CRC checksum for message integrity verification";
+CM_ BO_ 800 "ADAS system status including state machine, TTC, collision risk, and evasion direction";
+CM_ SG_ 800 System_State "System state: 0=Standby, 1=Armed, 2=Risk, 3=Evasive, 4=FailSafe";
+CM_ SG_ 800 TTC_Value "Time To Collision (0-10s, resolution 0.01s)";
+CM_ SG_ 800 CollisionRisk "Collision risk level: 0=None, 1=Warning, 2=Critical";
+CM_ SG_ 800 SensorFusion_Valid "Sensor fusion validity: 0=Invalid, 1=Valid";
+CM_ SG_ 800 Evasion_Direction "Evasion maneuver direction: 0=None, 1=Left, 2=Right";
+CM_ SG_ 800 Status_AliveCounter "Rolling counter for message alive monitoring (0-15)";
+CM_ SG_ 800 Status_CRC "CRC checksum for message integrity verification";
+CM_ BO_ 816 "ADAS diagnostic status including fail-safe code, DTC, and sensor timeout flags";
+CM_ SG_ 816 FailSafe_Code "Fail-safe reason code: 0=Normal, 1=SensorDegraded, 2=SensorFault, 3=CommTimeout, 4=CompositeFault";
+CM_ SG_ 816 DTC_Present "Diagnostic Trouble Code present flag: 0=No DTC, 1=DTC present";
+CM_ SG_ 816 DTC_Code "Diagnostic Trouble Code (ISO 14229 format)";
+CM_ SG_ 816 Radar_Timeout "Radar communication timeout flag: 0=Normal, 1=Timeout";
+CM_ SG_ 816 Camera_Timeout "Camera communication timeout flag: 0=Normal, 1=Timeout";
+CM_ SG_ 816 Sensor_Disagreement "Sensor data disagreement flag: 0=Agreement, 1=Disagreement";
+CM_ SG_ 816 Diag_AliveCounter "Rolling counter for message alive monitoring (0-15)";
+CM_ SG_ 816 Diag_CRC "CRC checksum for message integrity verification";
+CM_ BO_ 1024 "HMI warning signals including FCW, AEB, fail-safe, and override warnings";
+CM_ SG_ 1024 FCW_Warning "Forward Collision Warning: 0=OFF, 1=ON";
+CM_ SG_ 1024 AEB_Warning "Automatic Emergency Braking warning: 0=OFF, 1=ON";
+CM_ SG_ 1024 FailSafe_Warning "System fail-safe warning: 0=OFF, 1=ON";
+CM_ SG_ 1024 Override_Warning "Driver override warning: 0=OFF, 1=ON";
+CM_ SG_ 1024 Warning_Text_ID "Warning message text identifier (0-255)";
+CM_ SG_ 1024 Warning_Level "Warning severity level: 0=None, 1=Info, 2=Warning, 3=Critical";
+CM_ SG_ 1024 HMI_AliveCounter "Rolling counter for message alive monitoring (0-15)";
+CM_ BO_ 1040 "EPS status including readiness, actual steering angle, torque, and fault status";
+CM_ SG_ 1040 EPS_Ready "EPS system ready flag: 0=Not ready, 1=Ready";
+CM_ SG_ 1040 EPS_ActualAngle "Actual steering wheel angle (-30 to +30 deg, resolution 0.01 deg)";
+CM_ SG_ 1040 EPS_Torque "EPS motor torque output (0-100%, resolution 1%)";
+CM_ SG_ 1040 EPS_Fault "EPS fault status: 0=No fault, 1=Fault detected";
+CM_ SG_ 1040 EPS_AliveCounter "Rolling counter for message alive monitoring (0-15)";
+CM_ SG_ 1040 EPS_CRC "CRC checksum for message integrity verification";
+CM_ BO_ 1056 "ESC status including active status, readiness, intervention level, and wheel speeds";
+CM_ SG_ 1056 ESC_Active "ESC system active flag: 0=Inactive, 1=Active";
+CM_ SG_ 1056 ESC_Ready "ESC system ready flag: 0=Not ready, 1=Ready";
+CM_ SG_ 1056 ESC_Intervention "ESC intervention level: 0=None, 1=Light, 2=Medium, 3=Full";
+CM_ SG_ 1056 Wheel_Speed_FL "Front left wheel speed (0-300 km/h, resolution 0.1 km/h)";
+CM_ SG_ 1056 Wheel_Speed_FR "Front right wheel speed (0-300 km/h, resolution 0.1 km/h)";
+CM_ SG_ 1056 ESC_AliveCounter "Rolling counter for message alive monitoring (0-15)";
+CM_ SG_ 1056 ESC_CRC "CRC checksum for message integrity verification";
+BA_DEF_  "BusType" STRING ;
+BA_DEF_ BO_  "GenMsgCycleTime" INT 0 10000;
+BA_DEF_ BO_  "GenMsgSendType" STRING ;
+BA_DEF_DEF_  "BusType" "CAN";
+BA_DEF_DEF_  "GenMsgCycleTime" 0;
+BA_DEF_DEF_  "GenMsgSendType" "Cyclic";
+BA_ "GenMsgSendType" BO_ 256 "Cyclic";
+BA_ "GenMsgCycleTime" BO_ 256 20;
+BA_ "GenMsgSendType" BO_ 272 "Cyclic";
+BA_ "GenMsgCycleTime" BO_ 272 50;
+BA_ "GenMsgSendType" BO_ 512 "Cyclic";
+BA_ "GenMsgCycleTime" BO_ 512 100;
+BA_ "GenMsgSendType" BO_ 528 "Cyclic";
+BA_ "GenMsgCycleTime" BO_ 528 20;
+BA_ "GenMsgSendType" BO_ 768 "Cyclic";
+BA_ "GenMsgCycleTime" BO_ 768 20;
+BA_ "GenMsgSendType" BO_ 784 "Cyclic";
+BA_ "GenMsgCycleTime" BO_ 784 20;
+BA_ "GenMsgSendType" BO_ 800 "Cyclic";
+BA_ "GenMsgCycleTime" BO_ 800 100;
+BA_ "GenMsgSendType" BO_ 816 "Event";
+BA_ "GenMsgCycleTime" BO_ 816 0;
+BA_ "GenMsgSendType" BO_ 1024 "Event";
+BA_ "GenMsgCycleTime" BO_ 1024 0;
+BA_ "GenMsgSendType" BO_ 1040 "Cyclic";
+BA_ "GenMsgCycleTime" BO_ 1040 50;
+BA_ "GenMsgSendType" BO_ 1056 "Cyclic";
+BA_ "GenMsgCycleTime" BO_ 1056 50;
+VAL_ 256 Radar_Status 0 "OK" 1 "Degraded" 2 "Fault" ;
+VAL_ 256 Radar_ObjectType 0 "None" 1 "Vehicle" 2 "Pedestrian" 3 "Unknown" ;
+VAL_ 272 Camera_ObjectDetected 0 "No_Object" 1 "Object_Detected" ;
+VAL_ 272 Camera_LeftLaneAvailable 0 "Not_Available" 1 "Available" ;
+VAL_ 272 Camera_RightLaneAvailable 0 "Not_Available" 1 "Available" ;
+VAL_ 272 Camera_Status 0 "OK" 1 "Degraded" 2 "Fault" ;
+VAL_ 512 Vehicle_Gear 0 "P_Park" 1 "R_Reverse" 2 "N_Neutral" 3 "D_Drive" ;
+VAL_ 512 IGN_Status 0 "OFF" 1 "ON" ;
+VAL_ 528 Driver_Override 0 "No_Override" 1 "Override_Active" ;
+VAL_ 768 Steering_Direction 0 "Straight" 1 "Left" 2 "Right" ;
+VAL_ 768 Steering_Active 0 "Inactive" 1 "Active" ;
+VAL_ 784 AEB_Active 0 "Inactive" 1 "Active" ;
+VAL_ 784 AEB_Level 0 "None" 1 "Light" 2 "Medium" 3 "Full" ;
+VAL_ 800 System_State 0 "Standby" 1 "Armed" 2 "Risk" 3 "Evasive" 4 "FailSafe" ;
+VAL_ 800 CollisionRisk 0 "None" 1 "Warning" 2 "Critical" ;
+VAL_ 800 SensorFusion_Valid 0 "Invalid" 1 "Valid" ;
+VAL_ 800 Evasion_Direction 0 "None" 1 "Left" 2 "Right" ;
+VAL_ 816 FailSafe_Code 0 "Normal" 1 "SensorDegraded" 2 "SensorFault" 3 "CommTimeout" 4 "CompositeFault" ;
+VAL_ 816 DTC_Present 0 "No_DTC" 1 "DTC_Present" ;
+VAL_ 816 Radar_Timeout 0 "Normal" 1 "Timeout" ;
+VAL_ 816 Camera_Timeout 0 "Normal" 1 "Timeout" ;
+VAL_ 816 Sensor_Disagreement 0 "Agreement" 1 "Disagreement" ;
+VAL_ 1024 FCW_Warning 0 "OFF" 1 "ON" ;
+VAL_ 1024 AEB_Warning 0 "OFF" 1 "ON" ;
+VAL_ 1024 FailSafe_Warning 0 "OFF" 1 "ON" ;
+VAL_ 1024 Override_Warning 0 "OFF" 1 "ON" ;
+VAL_ 1024 Warning_Level 0 "None" 1 "Info" 2 "Warning" 3 "Critical" ;
+VAL_ 1040 EPS_Ready 0 "Not_Ready" 1 "Ready" ;
+VAL_ 1040 EPS_Fault 0 "No_Fault" 1 "Fault_Detected" ;
+VAL_ 1056 ESC_Active 0 "Inactive" 1 "Active" ;
+VAL_ 1056 ESC_Ready 0 "Not_Ready" 1 "Ready" ;
+VAL_ 1056 ESC_Intervention 0 "None" 1 "Light" 2 "Medium" 3 "Full" ;
+

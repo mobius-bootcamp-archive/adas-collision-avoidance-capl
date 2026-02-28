@@ -1,0 +1,70 @@
+/*@!Encoding:65001*/
+/*============================================================
+  File    : ESC_ECU.can
+  Node    : ESC_ECU
+  Project : ADAS_CollisionAvoidance
+  Panel 연동 sysvar (출력):
+    Status::ESC::Active
+    Status::ESC::Intervention
+    Status::ESC::WheelSpeedFL
+    Status::ESC::WheelSpeedFR
+============================================================*/
+variables
+{
+  message ESC_Status  msg_ESC;
+  msTimer tmr_ESC;
+  int    gActive        = 0;
+  int    gReady         = 1;
+  int    gIntervention  = 0;
+  float  gWheelFL       = 0.0;
+  float  gWheelFR       = 0.0;
+  float  gVehSpeed      = 0.0;
+  float  gCurrentDecel  = 0.0;
+  byte   gAliveCounter  = 0;
+}
+on start
+{
+  @sysvar::Status::ESC::Active       = 0;
+  @sysvar::Status::ESC::Intervention = 0;
+  @sysvar::Status::ESC::WheelSpeedFL = 0.0;
+  @sysvar::Status::ESC::WheelSpeedFR = 0.0;
+  setTimer(tmr_ESC, 50);
+  write("[ESC_ECU] Started.");
+}
+on message ADAS_BrakeCommand
+{
+  if (this.AEB_Active) {
+    gActive       = 1;
+    gIntervention = this.AEB_Level;
+    gCurrentDecel = this.Target_Deceleration * 0.01;
+    write("[ESC_ECU] AEB Level=%d Decel=%.2f m/s2", gIntervention, gCurrentDecel);
+  } else {
+    gActive=0; gIntervention=0; gCurrentDecel=0.0;
+  }
+}
+on message VehicleStatus
+{
+  gVehSpeed = this.Vehicle_Speed * 0.1;
+  gWheelFL  = gVehSpeed * 0.99;
+  gWheelFR  = gVehSpeed * 1.01;
+}
+on timer tmr_ESC
+{
+  gAliveCounter = (gAliveCounter+1) & 0x0F;
+  // sysvar 업데이트
+  @sysvar::Status::ESC::Active       = gActive;
+  @sysvar::Status::ESC::Intervention = gIntervention;
+  @sysvar::Status::ESC::WheelSpeedFL = gWheelFL;
+  @sysvar::Status::ESC::WheelSpeedFR = gWheelFR;
+  msg_ESC.ESC_Active       = gActive;
+  msg_ESC.ESC_Ready        = gReady;
+  msg_ESC.ESC_Intervention = gIntervention;
+  msg_ESC.Wheel_Speed_FL   = (word)(gWheelFL/0.1);
+  msg_ESC.Wheel_Speed_FR   = (word)(gWheelFR/0.1);
+  msg_ESC.ESC_AliveCounter = gAliveCounter;
+  msg_ESC.ESC_CRC          = calcCRC_ESC();
+  output(msg_ESC);
+  setTimer(tmr_ESC, 50);
+}
+on stopMeasurement { write("[ESC_ECU] Active=%d", gActive); }
+byte calcCRC_ESC() { byte c=0;int i;for(i=0;i<7;i++)c^=msg_ESC.byte(i);return c; }
